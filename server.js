@@ -1,117 +1,106 @@
 const express = require('express');
+const axios = require('axios');
 const app = express();
-const port = process.env.PORT || 3000; // Render provides a dynamic port
-const fs = require('fs');
-const path = require('path');
+const port = process.env.PORT || 3000;
 
-// Serve static files from the public folder
-app.use(express.static(path.join(__dirname, 'public')));
+// JSONBin API details
+const BIN_ID = "67eeabfb8a456b796681e58f";  // Replace with your JSONBin Bin ID
+const API_KEY = "$2a$10$pG6B7rxlxRG74kvi7tpZOeeNvbHSnPaROzEq0Rg1qT7iFKzutuINy"; // Replace with your JSONBin API Key
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
 
-// Root endpoint to serve the HTML file
+// Middleware
+app.use(express.static('public'));
+app.use(express.json());
+
+// Serve index.html
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-    console.log("HTML FILE Done:)")
+    res.sendFile(__dirname + '/public/index.html');
 });
 
-// Serve the todo.html page after login
+// Serve todo.html
 app.get('/todo', (req, res) => {
     res.sendFile(__dirname + '/public/todo.html');
 });
 
-// Middleware to parse JSON body
-app.use(express.json());
-
-// Directory for storing user data
-const dataDir = path.join(__dirname, 'data');
-
-// Ensure data directory exists
-if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir);
+// Fetch stored users from JSONBin
+async function getUsers() {
+    try {
+        const response = await axios.get(JSONBIN_URL, { headers: { 'X-Master-Key': API_KEY } });
+        return response.data.record || {};
+    } catch (error) {
+        console.error("Error fetching users:", error);
+        return {};
+    }
 }
 
+// Save users to JSONBin
+async function saveUsers(users) {
+    try {
+        await axios.put(JSONBIN_URL, users, { headers: { 'X-Master-Key': API_KEY, 'Content-Type': 'application/json' } });
+    } catch (error) {
+        console.error("Error saving users:", error);
+    }
+}
 
-// Handle login route
-app.post('/login', (req, res) => {
+// Create account
+app.post('/create-account', async (req, res) => {
     const { username, password } = req.body;
+    const users = await getUsers();
 
-    const userFile = path.join(dataDir, `${username}.json`);
+    if (users[username]) {
+        return res.json({ error: "User already exists." });
+    }
 
-    // Check if the file already exists
-    if (fs.existsSync(userFile)) {
-        // File exists, check password
-        const storedData = JSON.parse(fs.readFileSync(userFile, 'utf-8'));
+    users[username] = { password, tasks: [] };
+    await saveUsers(users);
 
-        if (storedData.password === password) {
-            return res.json({
-                message: 'Login successful!',
-                redirect: '/todo'  // This will be used for the redirect in the client
-            });
-        } else {
-            return res.json({ error: 'Incorrect password.' });
-        }
+    res.json({ message: "Account created successfully!" });
+});
+
+// Login
+app.post('/login', async (req, res) => {
+    const { username, password } = req.body;
+    const users = await getUsers();
+
+    if (!users[username]) {
+        return res.json({ error: "No user found. Would you like to create an account?", createAccount: true });
+    }
+
+    if (users[username].password === password) {
+        return res.json({ message: "Login successful!", redirect: "/todo" });
     } else {
-        // File does not exist, ask user to create it
-        return res.json({
-            error: `No user found. Would you like to create an account?`,
-            createAccount: true,
-        });
+        return res.json({ error: "Incorrect password." });
     }
 });
 
-// Handle user creation
-app.post('/create-account', (req, res) => {
-    const { username, password } = req.body;
-
-    const userFile = path.join(dataDir, `${username}.json`);
-
-    if (fs.existsSync(userFile)) {
-        return res.json({ error: 'User already exists.' });
-    }
-
-    // Store the password in a new JSON file
-    const userData = { username, password };
-    fs.writeFileSync(userFile, JSON.stringify(userData, null, 2));
-
-    return res.json({ message: 'Account created successfully.' });
-});
-
-
-// Handle task addition
-app.post('/add-task', (req, res) => {
+// Add task
+app.post('/add-task', async (req, res) => {
     const { username, task } = req.body;
-    const userFile = path.join(dataDir, `${username}.json`);
+    const users = await getUsers();
 
-    if (fs.existsSync(userFile)) {
-        const storedData = JSON.parse(fs.readFileSync(userFile, 'utf-8'));
-
-        // Add the new task to the user's tasks array
-        storedData.tasks = storedData.tasks || [];
-        storedData.tasks.push(task);
-
-        // Save the updated data back to the file
-        fs.writeFileSync(userFile, JSON.stringify(storedData, null, 2));
-
-        return res.json({ message: 'Task added successfully!' });
-    } else {
-        return res.json({ error: 'User not found.' });
+    if (!users[username]) {
+        return res.json({ error: "User not found." });
     }
+
+    users[username].tasks.push(task);
+    await saveUsers(users);
+
+    res.json({ message: "Task added successfully!" });
 });
 
-// Serve tasks for the user
-app.get('/get-tasks', (req, res) => {
+// Get tasks
+app.get('/get-tasks', async (req, res) => {
     const { username } = req.query;
-    const userFile = path.join(dataDir, `${username}.json`);
+    const users = await getUsers();
 
-    if (fs.existsSync(userFile)) {
-        const storedData = JSON.parse(fs.readFileSync(userFile, 'utf-8'));
-        return res.json({ tasks: storedData.tasks || [] });
-    } else {
-        return res.json({ error: 'User not found.' });
+    if (!users[username]) {
+        return res.json({ error: "User not found." });
     }
-});
 
+    res.json({ tasks: users[username].tasks });
+});
 
 // Start the server
 app.listen(port, () => {
-    console.log(`Server is running on http://0.0.0.0:${port}`);
+    console.log(`Server is running on http://localhost:${port}`);
 });
