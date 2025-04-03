@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - To-Do App</title>
+    <link rel="shortcut icon" href="logo.jpeg" type="image/x-icon">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <h2>Login</h2>
+            <form id="login-form">
+                <div class="input-group">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Enter your username" required>
+                </div>
+                <div class="input-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="btn">Login</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();  // Prevent the form from submitting normally
+
+    let username = document.getElementById("username").value.trim().toLowerCase();
+    let password = document.getElementById("password").value.trim();
+
+        // Validate input
+        if (!username || !password || /\s/.test(username) || /\s/.test(password)) {
+            alert("Fields cannot be empty or contain spaces!");
+            return;
+        }
+
+        // Validate username format (only lowercase letters and numbers)
+        const usernameRegex = /^[a-z0-9]+$/;
+        if (!usernameRegex.test(username)) {
+            alert("Username must only contain lowercase letters and numbers.");
+            return;
+        }
+
+        // Send POST request with username and password to the server
+        const response = await fetch("/login", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ username, password }),
+        });
+
+        const result = await response.json();
+
+        console.log(result);
+
+        if (result.error) {
+            // If the server asks to create an account
+            if (result.createAccount) {
+                // Ask user if they want to create an account
+                const createAccount = confirm(result.error);  // Display a confirm box
+                
+                if (createAccount) {
+                    // Send request to create the account with the provided username and password
+                    const createResponse = await fetch("/create-account", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({ username, password }),
+                    });
+
+                    const createResult = await createResponse.json();
+                    console.log(createResponse);
+
+                    if (createResult.error) {
+                        alert(createResult.error);
+                    } else {
+                        alert(createResult.message);
+                    }
+                }
+            } else {
+                alert(result.error);  // Show error message if password is incorrect or any other error
+            }
+        } else {
+            alert(result.message);  // Show success message if login is successful
+            console.log(result.message);
+            if (result.redirect) {
+                    localStorage.setItem("username", username); // Store username in localStorage
+                    window.location.href = result.redirect; // Redirect to the "todo.html" page
+                }
+        }
+    });
+    </script>
+</body>
+</html>

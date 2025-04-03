@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Todo - To-Do App</title>
+    <link rel="shortcut icon" href="logo.jpeg" type="image/x-icon">
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+                /* Global Styles */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="todo-box">
+            <h2>Welcome to Your To-Do List</h2>
+            <div>
+                <input type="text" id="task-input" placeholder="Add a new task" />
+                <button id="add-task-btn">Add Task</button>
+            </div>
+            <div id="task-list"></div>
+        </div>
+        <button id="logout-btn">Log out</button>
+    </div>
+
+    <script>        
+        // Retrieve username from localStorage
+        const username = localStorage.getItem("username");
+
+        if (!username) {
+            alert("You are not logged in!");
+            window.location.href = "index.html"; // Redirect back to login if no username is found
+        }
+
+        // Function to fetch tasks from the server
+        async function fetchTasks() {
+            const response = await fetch(`/get-tasks?username=${username}`);
+            const result = await response.json();
+
+            if (result.tasks) {
+                const taskListDiv = document.getElementById("task-list");
+                taskListDiv.innerHTML = ""; // Clear the list before updating
+
+                result.tasks.forEach((task) => {
+                    const taskDiv = document.createElement("div");
+                    taskDiv.classList.add("task");
+                    taskDiv.textContent = task;
+                    taskListDiv.appendChild(taskDiv);
+                });
+            } else {
+                alert(result.error || "Error fetching tasks");
+            }
+        }
+
+        // Handle adding task to the user's file
+        document.getElementById("add-task-btn").addEventListener("click", async () => {
+            const task = document.getElementById("task-input").value.trim();
+
+            if (!task) {
+                alert("Task cannot be empty.");
+                return;
+            }
+
+            const response = await fetch("/add-task", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ username, task }),
+            });
+
+            const result = await response.json();
+
+            if (result.message) {
+                alert(result.message);
+                fetchTasks(); // Fetch and display updated tasks
+            } else {
+                alert(result.error);
+            }
+
+            document.getElementById("task-input").value = ""; // Clear the input
+        });
+
+        // Fetch tasks when the page loads
+        fetchTasks();
+
+        document.getElementById("logout-btn").addEventListener("click", () => {
+            localStorage.removeItem("username"); // Clear the stored username
+            window.location.href = "index.html"; // Redirect to the login page
+        });
+
+    </script>
+</body>
+</html>
